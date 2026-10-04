@@ -276,7 +276,7 @@ async def safe_edit(query, text: str, **kwargs) -> None:
             return
         try:
             await query.message.reply_text(text, **kwargs)
-        except Exception as e2:
+        except Exception:
             pass
 
 
@@ -810,11 +810,13 @@ async def post_shutdown(app: Application) -> None:
 
 
 def main():
-    # 严格检查环境变量
+    # 严格检查环境变量，并打印详细错误信息
     if not BOT_TOKEN or ":" not in BOT_TOKEN:
-        raise SystemExit("❌ 未配置 BOT_TOKEN。请设置环境变量 BOT_TOKEN。")
+        logger.error("❌ 致命错误：未配置 BOT_TOKEN，或者 BOT_TOKEN 格式不正确。请在 Render 环境变量中添加 BOT_TOKEN。")
+        return
     if not DATABASE_URL:
-        raise SystemExit("❌ 未配置 DATABASE_URL。请设置环境变量 DATABASE_URL (Neon 连接字符串)。")
+        logger.error("❌ 致命错误：未配置 DATABASE_URL。请在 Render 环境变量中添加你的 Neon 数据库连接字符串。")
+        return
 
     start_health_server()
 
@@ -843,7 +845,7 @@ def main():
         app.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         logger.exception(f"❌ 机器人运行失败，错误信息: {e}")
-        time.sleep(10) # 强制等待 10 秒，防止 Render 频繁重启造成日志刷屏
+        time.sleep(10)
 
 
 if __name__ == '__main__':
