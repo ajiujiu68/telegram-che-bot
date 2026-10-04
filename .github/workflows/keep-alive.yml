@@ -2,7 +2,7 @@ name: Keep Render Alive
 
 on:
   schedule:
-    # 每 14 分钟 ping 一次，赶在 Render 15 分钟休眠阈值之前
+    # 每 14 分钟 ping 一次 (注意：*/14 实际是每小时的 0, 14, 28, 42, 56 分)
     - cron: '*/14 * * * *'
   workflow_dispatch:
 
@@ -12,6 +12,10 @@ jobs:
     steps:
       - name: Ping Render health endpoint
         run: |
-          curl -sf --max-time 60 https://telegram-che-bot.onrender.com/ > /dev/null \
-            && echo "✅ Ping OK" \
-            || echo "⚠️ Ping failed (service may be cold-starting)"
+          URL="https://telegram-che-bot.onrender.com/"
+          # 将超时时间提高到 120 秒，给 Render 足够的冷启动时间
+          if curl -sf --max-time 120 "$URL" > /dev/null; then
+            echo "✅ Ping OK"
+          else
+            echo "⚠️ Ping failed (service may be cold-starting or down)"
+          fi
