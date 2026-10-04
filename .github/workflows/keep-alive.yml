@@ -1,1 +1,17 @@
+name: Keep Render Alive
 
+on:
+  schedule:
+    # 每 14 分钟 ping 一次，赶在 Render 15 分钟休眠阈值之前
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render health endpoint
+        run: |
+          curl -sf --max-time 60 https://你的服务名.onrender.com/ > /dev/null \
+            && echo "✅ Ping OK" \
+            || echo "⚠️ Ping failed (service may be cold-starting)"
