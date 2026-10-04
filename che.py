@@ -3,26 +3,6 @@
 """
 Telegram 群组「上车」自动提醒机器人 (多群组·群主/管理员版)
 数据持久化：Neon Postgres (asyncpg)
-
-权限规则：
-    - 只有「将机器人设为管理员的群」的【群主或管理员】才被认定为机器人管理员
-    - 非管理员私聊机器人操作时，统一回复：❌ 您没有权限，请联系管理员操作
-    - 管理员管理自己群组的接车人（添加 / 删除 / 查看）
-
-特点：
-    - 多群组隔离：每个群组的接车人名单 / 轮询顺序完全独立
-    - 群内触发「上车」时，只 @ 该群组的下一位接车人
-    - 主菜单 4 个按钮：添加 / 删除 / 我的 / 查看我所在的群组
-
-依赖：
-    pip install "python-telegram-bot>=20.0" asyncpg
-
-运行：
-    export BOT_TOKEN="你的token"
-    export DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
-    python che.py
-
-要求：Python 3.10+（推荐 3.11+）
 """
 
 import asyncio
@@ -52,12 +32,8 @@ from telegram.ext import (
 # ==================================================================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-
-# Neon 数据库连接字符串（必须设置）
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
-
 TRIGGER = "上车"
-
 SUPER_ADMIN_IDS: list[int] = []
 
 CARS = ["奥迪", "奔驰", "玛莎拉蒂", "帕拉梅拉", "保时捷", "法拉利", "宝马", "凯迪拉克"]
@@ -70,7 +46,6 @@ MAX_NAME_LEN = 32
 ADMIN_ROLES = ("creator", "administrator")
 MEMBER_ROLES = ("creator", "administrator", "member", "restricted")
 
-# 数据库表名（三张表：groups / drivers / state）
 TABLE_GROUPS = "che_groups"
 TABLE_DRIVERS = "che_drivers"
 TABLE_STATE = "che_state"
@@ -89,10 +64,7 @@ user_states: dict = {}
 admin_cache: dict = {}
 member_cache: dict = {}
 
-# 数据库连接池
 db_pool: Optional[asyncpg.Pool] = None
-
-# 全局数据（从数据库加载到内存，写操作后同步回数据库）
 groups: dict = {}
 drivers_list: dict = {}
 state: dict = {}
@@ -101,7 +73,6 @@ state: dict = {}
 # ------------------------ 数据库操作 ------------------------
 
 async def init_db() -> None:
-    """初始化数据库连接池并创建表"""
     global db_pool
     if not DATABASE_URL:
         raise SystemExit("❌ 未配置 DATABASE_URL，请设置 Neon 连接字符串。")
@@ -111,15 +82,11 @@ async def init_db() -> None:
         min_size=1,
         max_size=5,
         command_timeout=30,
-        # Neon 空闲 5 分钟会断开连接，需要 pre_ping 或定期回收
-        # asyncpg 的 create_pool 没有内置 pre_ping，
-        # 通过 max_inactive_connection_lifetime 主动回收
         max_inactive_connection_lifetime=240,
     )
     logger.info("✅ Neon 数据库连接池已创建")
 
     async with db_pool.acquire() as conn:
-        # 通用 key-value 表：存储 groups / drivers / state 三个 JSON
         await conn.execute(f"""
             CREATE TABLE IF NOT EXISTS {TABLE_GROUPS} (
                 id INTEGER PRIMARY KEY DEFAULT 1,
@@ -145,7 +112,6 @@ async def init_db() -> None:
 
 
 async def close_db() -> None:
-    """关闭连接池"""
     global db_pool
     if db_pool:
         await db_pool.close()
@@ -153,7 +119,6 @@ async def close_db() -> None:
 
 
 async def db_load(table: str) -> dict:
-    """从数据库读取 JSON 数据"""
     if not db_pool:
         return {}
     try:
@@ -173,7 +138,6 @@ async def db_load(table: str) -> dict:
 
 
 async def db_save(table: str, data: dict) -> None:
-    """将 JSON 数据写入数据库（UPSERT）"""
     if not db_pool:
         return
     try:
@@ -189,20 +153,17 @@ async def db_save(table: str, data: dict) -> None:
 
 
 async def load_all_data() -> None:
-    """从数据库加载全部数据到内存"""
     global groups, drivers_list, state
     groups = await db_load(TABLE_GROUPS)
     drivers_list = await db_load(TABLE_DRIVERS)
     state = await db_load(TABLE_STATE)
 
-    # 兼容旧格式：drivers_list 的值必须是 list
     clean_drivers = {}
     for k, v in drivers_list.items():
         if isinstance(v, list):
             clean_drivers[str(k)] = v
     drivers_list = clean_drivers
 
-    # state 的值必须是 int
     clean_state = {}
     for k, v in state.items():
         try:
@@ -919,7 +880,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_type in ("group", "supergroup"):
         await track_group(chat)
 
-    # ---- 私聊状态机（管理员添加接车人） ----
     if chat_type == "private" and user_id in user_states:
         admin_groups = await get_admin_groups(context, user_id)
         if not admin_groups:
@@ -1030,7 +990,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_states.pop(user_id, None)
             return
 
-    # ---- 触发「上车」 ----
     if TRIGGER in text:
         if chat_type not in ("group", "supergroup"):
             return
@@ -1149,8 +1108,21 @@ def main():
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT, on_message))
 
+    logger.info("🚀 机器人开始运行...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    # 修复 Windows/Linux 下 asyncio 事件循环兼容性问题
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except AttributeError:
+        pass
+        
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("🛑 机器人已停止")
+    except Exception as e:
+        logger.exception(f"❌ 发生致命错误: {e}")
+        time.sleep(5) # 强制休眠 5 秒，防止 Render 频繁重启
