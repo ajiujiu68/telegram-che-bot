@@ -1,1 +1,18 @@
-
+services:
+  - type: web
+    name: telegram-che-bot
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: python che.py
+    healthCheckPath: /
+    envVars:
+      - key: BOT_TOKEN
+        sync: false        # 在 Render 控制台手动填写
+      - key: DATABASE_URL
+        sync: false        # 在 Render 控制台手动填写（Neon 连接字符串）
+      - key: PYTHON_VERSION
+        value: 3.11.9
