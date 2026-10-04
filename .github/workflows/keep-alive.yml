@@ -12,6 +12,6 @@ jobs:
     steps:
       - name: Ping Render health endpoint
         run: |
-          curl -sf --max-time 60 https://你的服务名.onrender.com/ > /dev/null \
+          curl -sf --max-time 60 https://telegram-che-bot.onrender.com/ > /dev/null \
             && echo "✅ Ping OK" \
             || echo "⚠️ Ping failed (service may be cold-starting)"
